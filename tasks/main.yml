@@ -63,7 +63,7 @@
   when: not check_path.stat.exists
 
 - name: Fetch random salts for WordPress config
-  ansible.builtin.local_action: command curl http://api.wordpress.org/secret-key/1.1/salt/
+  local_action: command curl http://api.wordpress.org/secret-key/1.1/salt/
   register: wp_salt
   become: false
 
