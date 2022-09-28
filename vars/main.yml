@@ -1,0 +1,13 @@
+---
+# vars file for wordpress-role
+install_packages:
+  - nginx
+  - php{{ php_version }}
+  - php{{ php_version }}-fpm
+  - php{{ php_version }}-mysql
+  - php{{ php_version }}-gd
+
+php_version: 7.2
+
+wp_version: 6.0.2
+wp_sha1sum: 9348f0757c21504d085a6c866ccbb86573b39d6f

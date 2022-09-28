@@ -1,0 +1,113 @@
+---
+# tasks file for wordpress-role
+# Установка Nginx
+- include_tasks: install.yml
+
+- name: Remove nginx default
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Restart nginx
+
+- name: Update nginx confs for WordPress + PHP
+  ansible.builtin.template:
+    src: default-site.conf.j2
+    dest: /etc/nginx/sites-available/{{ domain }}
+    owner: www-data
+    group: www-data
+    mode: u=rw,g=r,o=r # 0644
+  become: true
+
+- name: Enable site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/{{domain}}
+    dest: /etc/nginx/sites-enabled/{{ domain }}
+    owner: www-data
+    group: www-data
+    state: link
+  notify: Restart nginx
+  become: true
+
+- name: Create webroot
+  ansible.builtin.file:
+    state: directory
+    path: /var/www/
+    mode: u=rwx,g=rx,o=rx # 0755
+  become: true
+
+- name: Check if WordPress directory exists in /var/www
+  ansible.builtin.stat: "path=/var/www/{{ domain }}"
+  register: check_path
+
+- name: Download WordPress
+  ansible.builtin.get_url:
+    url: https://wordpress.org/wordpress-{{ wp_version }}.tar.gz
+    dest: /tmp/wordpress-{{ wp_version }}.tar.gz
+    checksum: "sha1:{{ wp_sha1sum }}"
+  become: true
+  when: not check_path.stat.exists
+
+- name: Extract WordPress
+  ansible.builtin.unarchive:
+    src: /tmp/wordpress-{{ wp_version }}.tar.gz
+    dest: /tmp
+    owner: www-data
+    group: www-data
+    copy: no
+  become: true
+  when: not check_path.stat.exists
+
+- name: Move WordPress install files
+  ansible.builtin.command: mv /tmp/wordpress /var/www/{{ domain }}
+  become: true
+  when: not check_path.stat.exists
+
+- name: Fetch random salts for WordPress config
+  ansible.builtin.local_action: command curl http://api.wordpress.org/secret-key/1.1/salt/
+  register: wp_salt
+  become: false
+
+- name: Add db-config
+  ansible.builtin.template:
+    src: db-config.php.j2
+    dest: /var/www/{{domain}}/db-config.php
+    owner: www-data
+    group: www-data
+    mode: u=rw,g=r,o=r # 0644
+  become: true
+
+- name: Add wp-config
+  ansible.builtin.template:
+    src: wp-config.php.j2
+    dest: /var/www/{{domain}}/wp-config.php
+    owner: www-data
+    group: www-data
+    mode: u=rw,g=r,o=r # 0644
+  become: true
+
+- name: Copy db.php to wp-content
+  ansible.builtin.copy:
+    src: files/db.php
+    dest: /var/www/{{domain}}/wp-content/db.php
+    owner: www-data
+    group: www-data
+    mode: u=r,g=r,o=r # 0444
+  become: true
+
+- name: Setup php-fpm
+  ansible.builtin.replace:
+    dest: /etc/php/{{ php_version }}/fpm/php.ini
+    regexp: "(;cgi.fix_pathinfo=1)"
+    replace: "cgi.fix_pathinfo=0"
+  notify: Restart nginx
+  become: true
+
+- name: Add php settings
+  ansible.builtin.template:
+    src: nginx-wp-common.conf.j2
+    dest: /etc/nginx/nginx-wp-common.conf
+    owner: www-data
+    group: www-data
+    mode: u=rw,g=r,o=r # 0644
+  notify: Restart nginx
+  become: true
